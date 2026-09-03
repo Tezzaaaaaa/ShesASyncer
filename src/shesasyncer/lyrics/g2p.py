@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from typing import Sequence
+import os
 import re
 import shutil
 import subprocess
@@ -34,7 +35,11 @@ class EspeakG2P(G2PEngine):
         super().__init__(self._convert)
 
     def available(self) -> bool:
-        return bool(self.executable)
+        if not self.executable:
+            return False
+        if os.path.isabs(self.executable) or os.path.sep in self.executable:
+            return os.path.isfile(self.executable) and os.access(self.executable, os.X_OK)
+        return shutil.which(self.executable) is not None
 
     def _convert(self, text: str, language: str | None = None) -> tuple[str, ...]:
         if not self.executable or not text.strip():
