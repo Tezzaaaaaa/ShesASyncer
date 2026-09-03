@@ -71,7 +71,9 @@ def _map_words(lyric: str, words: list[dict]) -> list[dict]:
     lyric_text = [x[2] for x in lyric_tokens]
     matcher = SequenceMatcher(None, [x.casefold() for x in lyric_text], [x.casefold() for x in engine_text])
     mapped = []
-    for a0, a1, b0, b1 in matcher.get_matching_blocks():
+    for match in matcher.get_matching_blocks():
+        a0, a1 = match.a, match.a + match.size
+        b0, b1 = match.b, match.b + match.size
         for offset in range(min(a1 - a0, b1 - b0)):
             lyric_start, lyric_end, text = lyric_tokens[a0 + offset]
             word = words[b0 + offset]
