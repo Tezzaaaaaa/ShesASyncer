@@ -97,11 +97,12 @@ def ctc_viterbi_alignment(
                 if finite_scores:
                     mean_score = sum(finite_scores) / len(finite_scores)
                     confidence = math.exp(mean_score) if mean_score <= 0 else 1.0 - math.exp(-mean_score)
+                    end_time = frames[i].time if i < n_frames else frames[-1].time + hop
                     spans.append({
-                        "token_index": (current_state // 2),
+                        "token_index": current_state // 2,
                         "phoneme": label,
                         "start": frames[start].time,
-                        "end": frames[i].time,
+                        "end": end_time,
                         "confidence": max(0.0, min(1.0, confidence)),
                     })
             start = i if state >= 0 else None
