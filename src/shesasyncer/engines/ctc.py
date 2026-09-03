@@ -6,6 +6,7 @@ reconstruction of trusted lyric lines.
 """
 
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 
 from ..evidence.acoustic import AcousticFrame
 from ..evidence.ctc import ctc_viterbi_alignment
@@ -70,4 +71,18 @@ class CtcSingingEngine:
                     phonemes=tuple({k: v for k, v in span.items() if k != "token_index"} for span in line_spans),
                 )
             )
+        return tuple(self._fill_line_gaps(result, frames))
+
+    @staticmethod
+    def _fill_line_gaps(segments: tuple[TimedSegment, ...], frames: tuple[AcousticFrame, ...]) -> tuple[TimedSegment, ...]:
+        if not segments or not frames:
+            return segments
+
+        result = list(segments)
+        result[0] = replace(result[0], start=min(result[0].start, float(frames[0].time)))
+        for index in range(1, len(result)):
+            previous = result[index - 1]
+            current = result[index]
+            if previous.end < current.start:
+                result[index - 1] = replace(previous, end=current.start)
         return tuple(result)
