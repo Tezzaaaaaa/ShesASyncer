@@ -9,6 +9,7 @@ class TimedSegment:
     text: str
     confidence: float = 0.0
     words: tuple[dict, ...] = ()
+    phonemes: tuple[dict, ...] = ()
 
 
 class TimingEngine(Protocol):
