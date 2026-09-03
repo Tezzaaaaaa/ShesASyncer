@@ -17,7 +17,19 @@ class TimelineValidation:
 
     @property
     def valid(self) -> bool:
-        return not any(issue.severity == "error" for issue in self.issues)
+        return not self.errors
+
+    @property
+    def errors(self) -> tuple[TimelineIssue, ...]:
+        return tuple(issue for issue in self.issues if issue.severity == "error")
+
+    @property
+    def warnings(self) -> tuple[TimelineIssue, ...]:
+        return tuple(issue for issue in self.issues if issue.severity == "warning")
+
+    @property
+    def affected_lines(self) -> tuple[int, ...]:
+        return tuple(sorted({issue.line_index for issue in self.issues}))
 
 
 def validate_timeline(
@@ -28,13 +40,9 @@ def validate_timeline(
     max_duration: float = 20.0,
     max_gap: float = 30.0,
 ) -> TimelineValidation:
-    """Reject impossible timings without silently repairing them.
-
-    Validation is deliberately conservative: suspicious timings are reported
-    so the adaptive layer can retry/refine them instead of inventing a fix.
-    """
+    """Reject impossible timings without silently repairing them."""
     issues: list[TimelineIssue] = []
-    ordered = sorted(evidence, key=lambda item: item.line_index)
+    ordered = sorted(evidence, key=lambda item: (item.timing.start, item.line_index))
 
     previous_end: float | None = None
     previous_index: int | None = None
@@ -62,7 +70,7 @@ def validate_timeline(
         if duration is not None and end > duration + 0.05:
             issues.append(TimelineIssue(index, "past-duration", "error", "Timing extends beyond the audio duration."))
 
-        previous_end = max(previous_end or end, end)
+        previous_end = max(previous_end, end) if previous_end is not None else end
         previous_index = index
 
     return TimelineValidation(tuple(issues))
