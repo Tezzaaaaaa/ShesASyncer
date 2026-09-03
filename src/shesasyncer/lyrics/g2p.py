@@ -33,6 +33,9 @@ class EspeakG2P(G2PEngine):
         self.strip_stress = strip_stress
         super().__init__(self._convert)
 
+    def available(self) -> bool:
+        return bool(self.executable)
+
     def _convert(self, text: str, language: str | None = None) -> tuple[str, ...]:
         if not self.executable or not text.strip():
             return ()
