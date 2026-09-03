@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
+from ..alignment.refinement import refine_evidence
 from ..alignment.sequence import monotonic_match
 from ..consensus.merge import Candidate, merge_candidates
 from ..engines.adapters import TimedSegment, TimingEngine
@@ -15,23 +16,12 @@ class EngineEvidence:
 
 
 class AdaptiveAligner:
-    """Run timing engines adaptively and arbitrate their evidence safely.
-
-    Trusted lyrics remain canonical. Engines never overwrite one another:
-    compatible timing evidence reinforces through consensus, while conflicting
-    evidence leaves the line unresolved for targeted refinement.
-    """
+    """Run timing engines adaptively and arbitrate their evidence safely."""
 
     def __init__(self, engines: Sequence[TimingEngine] = ()):
         self.engines = tuple(engines)
 
-    def collect(
-        self,
-        audio_path: str,
-        lyrics: Sequence[str] | Sequence[LyricLine],
-        *,
-        language: str | None = None,
-    ) -> tuple[EngineEvidence, ...]:
+    def collect(self, audio_path: str, lyrics: Sequence[str] | Sequence[LyricLine], *, language: str | None = None) -> tuple[EngineEvidence, ...]:
         lines = [x if isinstance(x, LyricLine) else LyricLine(i, x) for i, x in enumerate(lyrics)]
         collected: list[EngineEvidence] = []
         for engine in self.engines:
@@ -66,27 +56,28 @@ class AdaptiveAligner:
             evidence = self._match(lines, evidence_runs)
             unresolved = self._unresolved_lines(lines, evidence)
 
-        # Validation is an acceptance gate, not a repair pass. Any impossible
-        # timing is removed from the accepted timeline and becomes unresolved.
         validation = validate_timeline(evidence)
-        invalid_lines = {issue.line_index for issue in validation.errors}
-        if invalid_lines:
-            evidence = [item for item in evidence if item.line_index not in invalid_lines]
-            unresolved = self._unresolved_lines(lines, evidence)
+        invalid_lines = {issue.line_index for issue in validation.issues if issue.severity == "error"}
+        if invalid_lines and retry:
+            try:
+                evidence_runs.extend(retry(audio_path, sorted(invalid_lines)))
+            except Exception:
+                pass
+            evidence = self._match(lines, evidence_runs)
+            validation = validate_timeline(evidence)
 
+        invalid_lines = {issue.line_index for issue in validation.issues if issue.severity == "error"}
+        evidence = [item for item in evidence if item.line_index not in invalid_lines]
+        evidence = refine_evidence(evidence)
+        unresolved = self._unresolved_lines(lines, evidence)
+
+        warnings = [f"Timeline {issue.severity}: line {issue.line_index}: {issue.message}" for issue in validation.issues]
+        by_line = {item.line_index: item for item in evidence}
         output = []
-        warnings = [
-            f"Timeline {issue.severity}: line {issue.line_index}: {issue.message}"
-            for issue in validation.issues
-        ]
-        by_line: dict[int, AlignmentEvidence] = {}
-        for item in evidence:
-            by_line.setdefault(item.line_index, item)
-
         for line in lines:
             item = by_line.get(line.index)
             if item is None:
-                output.append({"index": line.index, "text": line.text, "start": None, "end": None, "confidence": 0.0, "source": None})
+                output.append({"index": line.index, "text": line.text, "start": None, "end": None, "confidence": 0.0, "source": None, "words": [], "characters": []})
                 if line.index not in invalid_lines:
                     warnings.append(f"No reliable timing evidence for lyric line {line.index}")
             else:
@@ -98,33 +89,23 @@ class AdaptiveAligner:
                     "confidence": item.timing.confidence,
                     "source": item.source,
                     "words": item.metadata.get("words", []),
+                    "characters": item.metadata.get("characters", []),
                 })
-
         if unresolved:
             warnings.append("Unresolved lines remain after validation: " + ", ".join(map(str, unresolved)))
-
         return AlignmentResult(output, self._confidence(evidence), warnings, evidence)
 
     @staticmethod
     def _match(lines: Sequence[LyricLine], runs: Sequence[EngineEvidence]) -> list[AlignmentEvidence]:
         candidates: dict[int, list[Candidate]] = {line.index: [] for line in lines}
         metadata: dict[tuple[int, str], dict] = {}
-
         for run in runs:
-            segments = [
-                {"start": s.start, "end": s.end, "text": s.text, "confidence": s.confidence}
-                for s in run.segments
-            ]
-            pairs = monotonic_match([line.text for line in lines], segments)
-            for line_index, segment_index, similarity in pairs:
+            segments = [{"start": s.start, "end": s.end, "text": s.text, "confidence": s.confidence} for s in run.segments]
+            for line_index, segment_index, similarity in monotonic_match([line.text for line in lines], segments):
                 segment = run.segments[segment_index]
                 score = max(0.0, min(1.0, similarity * max(segment.confidence, 0.01)))
                 candidates[line_index].append(Candidate(segment.start, segment.end, score, run.engine))
-                metadata[(line_index, run.engine)] = {
-                    "words": list(segment.words),
-                    "similarity": similarity,
-                    "engine_confidence": segment.confidence,
-                }
+                metadata[(line_index, run.engine)] = {"words": list(segment.words), "similarity": similarity, "engine_confidence": segment.confidence}
 
         output: list[AlignmentEvidence] = []
         for line in lines:
@@ -135,14 +116,13 @@ class AdaptiveAligner:
             if not sources:
                 continue
             source = merged.source if len(sources) > 1 else sources[0]
-            source_meta = metadata.get((line.index, source), {})
             output.append(AlignmentEvidence(
                 line_index=line.index,
                 timing=Timing(merged.start, merged.end, merged.confidence, "consensus" if len(sources) > 1 else source),
                 matched_text=line.text,
                 score=merged.confidence,
                 source=source,
-                metadata={"sources": sources, "agreement": len(sources) > 1, **source_meta},
+                metadata={"sources": sources, "agreement": len(sources) > 1, **metadata.get((line.index, source), {})},
             ))
         return output
 
