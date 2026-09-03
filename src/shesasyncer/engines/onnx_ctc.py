@@ -26,7 +26,7 @@ class OnnxCtcRunner:
         model_path: str,
         vocab_path: str,
         *,
-        blank_token: str = "<blank>",
+        blank_token: str = "<pad>",
         sample_rate: int = 16_000,
         waveform_loader: Callable[[str, int], Sequence[float]] | None = None,
         ort_module=None,
@@ -94,33 +94,25 @@ class OnnxCtcRunner:
             raise ValueError("CTC ONNX model must return [frames, vocabulary] logits")
 
         log_probs = _log_softmax(logits, self._np)
-        requested = set(str(item).strip() for item in phonemes if str(item).strip())
+        requested = {str(item).strip() for item in phonemes if str(item).strip()}
         requested.add(self.blank_token)
 
-        ids = {}
-        for token in requested:
-            if token in self._vocab:
-                ids[token] = self._vocab[token]
-
+        ids = {token: self._vocab[token] for token in requested if token in self._vocab}
         if self.blank_token not in ids:
             raise ValueError(f"CTC vocabulary does not contain blank token {self.blank_token!r}")
         missing = requested.difference(ids)
         if missing:
             raise ValueError(f"CTC vocabulary is missing phonemes: {sorted(missing)}")
 
-        # CTC/Wav2Vec2 emits at a fixed frame rate; infer the time scale from
-        # the input duration rather than hard-coding a model-specific stride.
         duration = len(waveform) / float(self.sample_rate)
         hop = duration / max(1, log_probs.shape[0])
-        frames = []
-        for index, row in enumerate(log_probs):
-            frames.append(
-                AcousticFrame(
-                    time=index * hop,
-                    scores={token: float(row[token_id]) for token, token_id in ids.items()},
-                )
+        return tuple(
+            AcousticFrame(
+                time=index * hop,
+                scores={token: float(row[token_id]) for token, token_id in ids.items()},
             )
-        return tuple(frames)
+            for index, row in enumerate(log_probs)
+        )
 
 
 def _normalize_vocab(raw: object) -> dict[str, int]:
@@ -129,9 +121,9 @@ def _normalize_vocab(raw: object) -> dict[str, int]:
     result: dict[str, int] = {}
     for key, value in raw.items():
         try:
-            if isinstance(value, int):
+            if isinstance(value, int) and not isinstance(value, bool):
                 result[str(key)] = value
-            elif isinstance(key, str) and str(key).isdigit():
+            elif isinstance(key, str) and key.isdigit():
                 result[str(value)] = int(key)
         except (TypeError, ValueError):
             continue
