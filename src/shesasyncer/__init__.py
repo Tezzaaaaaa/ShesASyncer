@@ -6,6 +6,7 @@ from .engines.whisperx import WhisperXEngine
 from .engines.sofa import SofaEngine
 from .engines.native import NativeSingingEngine
 from .engines.ctc import CtcSingingEngine
+from .engines.onnx_ctc import OnnxCtcRunner
 from .evidence.acoustic import AcousticFrame, viterbi_phoneme_alignment
 from .evidence.ctc import ctc_viterbi_alignment
 from .evidence.phoneme import PhonemeBoundary, normalize_phonemes
@@ -24,6 +25,7 @@ __all__ = [
     "SofaEngine",
     "NativeSingingEngine",
     "CtcSingingEngine",
+    "OnnxCtcRunner",
     "AcousticFrame",
     "viterbi_phoneme_alignment",
     "ctc_viterbi_alignment",
