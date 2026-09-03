@@ -4,6 +4,7 @@ from typing import Callable, Sequence
 from ..alignment.sequence import monotonic_match
 from ..consensus.merge import Candidate, merge_candidates
 from ..engines.adapters import TimedSegment, TimingEngine
+from ..validation.timeline import validate_timeline
 from .models import AlignmentEvidence, AlignmentResult, LyricLine, Timing
 
 
@@ -39,7 +40,6 @@ class AdaptiveAligner:
             try:
                 segments = tuple(engine.align(audio_path, [x.text for x in lines], language))
             except Exception:
-                # An optional engine must never take down the complete alignment.
                 continue
             if segments:
                 collected.append(EngineEvidence(engine.name, segments))
@@ -66,8 +66,19 @@ class AdaptiveAligner:
             evidence = self._match(lines, evidence_runs)
             unresolved = self._unresolved_lines(lines, evidence)
 
+        # Validation is an acceptance gate, not a repair pass. Any impossible
+        # timing is removed from the accepted timeline and becomes unresolved.
+        validation = validate_timeline(evidence)
+        invalid_lines = {issue.line_index for issue in validation.errors}
+        if invalid_lines:
+            evidence = [item for item in evidence if item.line_index not in invalid_lines]
+            unresolved = self._unresolved_lines(lines, evidence)
+
         output = []
-        warnings = []
+        warnings = [
+            f"Timeline {issue.severity}: line {issue.line_index}: {issue.message}"
+            for issue in validation.issues
+        ]
         by_line: dict[int, AlignmentEvidence] = {}
         for item in evidence:
             by_line.setdefault(item.line_index, item)
@@ -76,7 +87,8 @@ class AdaptiveAligner:
             item = by_line.get(line.index)
             if item is None:
                 output.append({"index": line.index, "text": line.text, "start": None, "end": None, "confidence": 0.0, "source": None})
-                warnings.append(f"No reliable timing evidence for lyric line {line.index}")
+                if line.index not in invalid_lines:
+                    warnings.append(f"No reliable timing evidence for lyric line {line.index}")
             else:
                 output.append({
                     "index": line.index,
@@ -89,7 +101,7 @@ class AdaptiveAligner:
                 })
 
         if unresolved:
-            warnings.append("Unresolved lines remain after evidence merge: " + ", ".join(map(str, unresolved)))
+            warnings.append("Unresolved lines remain after validation: " + ", ".join(map(str, unresolved)))
 
         return AlignmentResult(output, self._confidence(evidence), warnings, evidence)
 
