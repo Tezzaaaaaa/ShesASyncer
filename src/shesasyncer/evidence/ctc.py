@@ -1,4 +1,5 @@
 from typing import Sequence
+import math
 
 from .acoustic import AcousticFrame
 
@@ -94,12 +95,14 @@ def ctc_viterbi_alignment(
                 ]
                 finite_scores = [score for score in frame_scores if score != neg_inf]
                 if finite_scores:
+                    mean_score = sum(finite_scores) / len(finite_scores)
+                    confidence = math.exp(mean_score) if mean_score <= 0 else 1.0 - math.exp(-mean_score)
                     spans.append({
                         "token_index": (current_state // 2),
                         "phoneme": label,
                         "start": frames[start].time,
                         "end": frames[i - 1].time + hop,
-                        "confidence": max(0.0, min(1.0, sum(finite_scores) / len(finite_scores))),
+                        "confidence": max(0.0, min(1.0, confidence)),
                     })
             start = i if state >= 0 else None
             current_state = state if state >= 0 else None
