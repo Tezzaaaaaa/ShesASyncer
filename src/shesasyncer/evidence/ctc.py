@@ -101,7 +101,7 @@ def ctc_viterbi_alignment(
                         "token_index": (current_state // 2),
                         "phoneme": label,
                         "start": frames[start].time,
-                        "end": frames[i - 1].time + hop,
+                        "end": frames[i].time,
                         "confidence": max(0.0, min(1.0, confidence)),
                     })
             start = i if state >= 0 else None
