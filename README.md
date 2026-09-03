@@ -4,104 +4,102 @@ AI-backed lyric alignment engine for accurate synchronisation of trusted lyrics 
 
 ## Purpose
 
-ShesASyncer aligns **trusted lyric text** to the actual timing of an audio recording. It does not replace trusted lyrics with an ASR transcript. ASR, forced alignment, phoneme alignment and vocal analysis are treated as timing evidence that can be combined, scored and cross-checked.
+ShesASyncer aligns **trusted lyric text** to the actual timing of an audio recording. It never replaces trusted lyrics with an ASR transcript. Recognition, acoustic phoneme evidence and vocal analysis are timing evidence that can be combined, scored and cross-checked.
 
 ## Design goals
 
 - Trusted lyrics remain canonical.
 - Fast paths for clean audio; expensive processing only when needed.
-- Singing-aware alignment rather than speech-only assumptions.
-- Line, word and character timing where evidence supports it.
+- Singing-aware alignment without copying a third-party aligner's architecture.
+- Line, word and phoneme timing where evidence supports it.
 - Explicit confidence and uncertainty.
-- Conflict detection instead of silently accepting bad timestamps.
-- Targeted retries on difficult sections rather than rerunning the whole track.
-- Adapter-based external engines so individual models can be replaced without changing the core pipeline.
-- Deterministic, machine-readable alignment output suitable for KEFE.
-
-## Current pipeline
-
-```text
-AUDIO + TRUSTED LYRICS
-          |
-    QUICK ANALYSIS
-          |
-    AVAILABLE ENGINES
-          |
-   PRIMARY EVIDENCE
-          |
-   GLOBAL MONOTONIC
-      MATCHING
-          |
-    EVIDENCE MERGE
-          |
-    +-----+-----+
-    |           |
-  AGREE       CONFLICT
-    |           |
- ACCEPT      TARGETED RETRY
-                |
-           CONSENSUS / REVIEW
-                |
-          FINAL TIMELINE
-```
-
-The public `AlignmentPipeline.run_audio()` path now executes configured timing engines through a common adapter interface. `AdaptiveAligner` keeps engine execution, lyric matching and evidence merging separate so heavy models can be added without changing the core data model.
+- Conflict detection instead of silently averaging contradictory timestamps.
+- Targeted retries on difficult sections.
+- Replaceable model adapters with ShesASyncer-owned decoding and consensus.
+- Deterministic output suitable for KEFE.
 
 ## Architecture
 
 ```text
-src/shesasyncer/
-├── core/
-│   ├── adaptive.py
-│   ├── pipeline.py
-│   └── models.py
-├── media/
-├── audio/
-│   └── analysis.py
-├── evidence/
-├── lyrics/
-├── alignment/
-│   ├── anchor.py
-│   └── sequence.py
-├── consensus/
-│   ├── confidence.py
-│   └── merge.py
-├── validation/
-├── output/
-└── engines/
-    ├── adapters.py
-    ├── whisperx.py
-    ├── sofa.py
-    └── demucs.py
+AUDIO + TRUSTED LYRICS
+          |
+     QUICK ANALYSIS
+          |
+    ┌─────┴───────────┐
+    |                 |
+ CLEAN ENOUGH      DIFFICULT
+    |                 |
+ CTC PHONEME       VOCAL / OTHER
+ EVIDENCE          EVIDENCE
+    |                 |
+    └────────┬────────┘
+             |
+      SHESASYNCER DECODER
+       + EVIDENCE MERGE
+             |
+      ┌──────┴──────┐
+      |             |
+    AGREE         CONFLICT
+      |             |
+    ACCEPT      TARGETED RETRY
+                    |
+               CONSENSUS
+                    |
+             FINAL TIMELINE
 ```
 
-## Engine strategy
+The core alignment logic owns the temporal decoding, matching, confidence, conflict handling and output. Acoustic models are interchangeable evidence providers.
 
-WhisperX is integrated as an optional timing-evidence engine. It provides ASR and forced-alignment word timestamps; its recognised text is matched back to the trusted lyrics rather than replacing them. WhisperX's forced-alignment architecture is specifically intended to improve timestamp precision over raw Whisper segment timestamps. citeturn0search0turn0search2
+## Native CTC path
 
-SOFA remains an isolated singing-specific adapter. SOFA is designed for singing voice forced alignment and supports confidence output, making it suitable for the phoneme evidence layer rather than as the sole authority. citeturn1search0
+The native path is a **Wav2Vec2-style acoustic encoder + phoneme CTC posterior + ShesASyncer CTC decoder**. This is deliberately different from SOFA's singing-aligner architecture.
 
-The project intentionally does **not** vendor large model weights or copy entire third-party implementations. External engines stay behind adapters and can be installed/configured separately.
+The repository provides:
 
-## Core principle
+- `G2PEngine` for an injectable grapheme-to-phoneme boundary.
+- `EspeakG2P` for runtime eSpeak NG IPA conversion.
+- `AcousticFrame` for model-independent frame/posterior data.
+- CTC Viterbi decoding with explicit blank handling and repeated-phoneme support.
+- `CtcSingingEngine` for reconstructing trusted lyric-line timings.
+- `OnnxCtcRunner` for local ONNX Runtime inference.
+- Optional NumPy/ONNX dependencies; model weights remain external.
 
-When the lyrics are already known, transcription is evidence, not truth. ShesASyncer should use recognition systems to discover **where** words or phonemes occur while preserving the supplied lyric text as the source of truth.
+A suitable external reference model is the Apache-2.0 `wav2vec2-espeak-ctc` ONNX export, which accepts mono 16 kHz audio and emits 392 IPA CTC classes at approximately 50 frames/second. Model assets are intentionally not bundled into this repository. citeturn0search0turn0search3
+
+## External engines
+
+WhisperX remains optional timing evidence. Its recognized text is matched back to trusted lyrics rather than becoming the source of truth.
+
+SOFA remains an isolated optional singing-specific evidence adapter. It is not required by the native CTC path.
+
+The project does **not** vendor large model weights or copy third-party implementations. External engines stay behind adapters and can be replaced without changing the core timeline model.
+
+## Installation
+
+Core package:
+
+```bash
+python -m pip install -e .
+```
+
+Tests:
+
+```bash
+python -m pip install -e '.[test]'
+python -m pytest -q
+```
+
+ONNX CTC runtime:
+
+```bash
+python -m pip install -e '.[onnx]'
+```
+
+Install eSpeak NG separately when using `EspeakG2P`. The adapter discovers `espeak-ng` or `espeak` at runtime.
 
 ## Status
 
-**Early working foundation.** The repository now has:
-
-- dependency-free trusted lyric models
-- global monotonic lyric-to-timing matching
-- adaptive multi-engine orchestration
-- confidence-weighted consensus
-- disagreement protection
-- targeted retry hooks
-- optional WhisperX timing integration
-- isolated SOFA integration boundary
-- test coverage for consensus, conflicts and retries
-
-Next production layer: vocal isolation and a real SOFA execution adapter, followed by word/character timeline refinement and objective alignment-quality metrics.
+**Active development.** The repository now has the core adaptive alignment foundation plus a native CTC phoneme-alignment path. The remaining production work is model validation on representative singing audio, vocal-isolation routing for difficult mixes, objective timing benchmarks and KEFE integration.
 
 ## License
 
