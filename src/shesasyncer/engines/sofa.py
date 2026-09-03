@@ -9,6 +9,7 @@ TimedSegment objects containing phoneme boundaries.
 from collections.abc import Callable, Sequence
 
 from .adapters import TimedSegment
+from ..evidence.phoneme import normalize_phonemes
 
 
 class SofaEngine:
@@ -41,16 +42,24 @@ class SofaEngine:
                 start = float(segment["start"])
                 end = float(segment["end"])
                 text = str(segment.get("text", ""))
+                confidence = float(segment.get("confidence", 0.0) or 0.0)
             except (KeyError, TypeError, ValueError):
                 continue
             words = tuple(segment.get("words", ()) or ())
+            phonemes = normalize_phonemes(segment.get("phonemes", ()))
             result.append(
                 TimedSegment(
                     start=start,
                     end=end,
                     text=text,
-                    confidence=float(segment.get("confidence", 0.0) or 0.0),
+                    confidence=confidence,
                     words=words,
+                    phonemes=tuple({
+                        "phoneme": item.symbol,
+                        "start": item.start,
+                        "end": item.end,
+                        "confidence": item.confidence,
+                    } for item in phonemes),
                 )
             )
         return tuple(result)
