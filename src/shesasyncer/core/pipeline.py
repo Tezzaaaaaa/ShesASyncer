@@ -1,22 +1,21 @@
 from ..alignment.anchor import anchor_lines
 from ..alignment.sequence import monotonic_match
 from ..consensus.confidence import confidence, conflicts
+from ..core.adaptive import AdaptiveAligner
 from ..core.models import AlignmentEvidence, AlignmentResult, LyricLine, Timing
+from ..engines.adapters import TimingEngine
 
 
 class AlignmentPipeline:
-    """Adaptive core pipeline.
+    """Public pipeline with a lightweight path and an adaptive audio path."""
 
-    Existing timed evidence is preferred. When it is unavailable, a global
-    monotonic matcher is used rather than greedy line-by-line matching. Heavy
-    engines remain optional adapters and are invoked by the host application.
-    """
+    def __init__(self, engines: tuple[TimingEngine, ...] = ()):
+        self.engines = engines
 
     def run(self, lyrics: list[str] | list[LyricLine], timed_segments: list[dict]) -> AlignmentResult:
         lines = [x if isinstance(x, LyricLine) else LyricLine(i, x) for i, x in enumerate(lyrics)]
         evidence = anchor_lines(lines, timed_segments, min_score=0.45)
 
-        # If greedy anchoring missed material, use global sequence context.
         matched = {e.line_index for e in evidence}
         if len(matched) < len(lines) and timed_segments:
             pairs = monotonic_match([x.text for x in lines], timed_segments)
@@ -49,3 +48,13 @@ class AlignmentPipeline:
         if conflict_lines:
             warnings.append("Conflicting alignment evidence requires targeted refinement: " + ", ".join(map(str, conflict_lines)))
         return AlignmentResult(output, confidence(evidence), warnings, evidence)
+
+    def run_audio(
+        self,
+        audio_path: str,
+        lyrics: list[str] | list[LyricLine],
+        *,
+        language: str | None = None,
+    ) -> AlignmentResult:
+        """Align trusted lyrics to an audio file using configured engines."""
+        return AdaptiveAligner(self.engines).run(audio_path, lyrics, language=language)
