@@ -2,7 +2,7 @@
 
 Unlike a SOFA wrapper, this engine owns the decoding contract. A host supplies
 an acoustic scorer; ShesASyncer performs G2P, monotonic phoneme decoding, and
-reconstruction of line/word evidence.
+reconstruction of line evidence.
 """
 
 from collections.abc import Callable, Sequence
@@ -47,11 +47,11 @@ class NativeSingingEngine:
             return ()
 
         result: list[TimedSegment] = []
-        cursor = 0
+        offset = 0
         for line, phonemes in zip(lines, line_phonemes):
-            count = len(phonemes)
-            line_spans = spans[cursor:cursor + count]
-            cursor += count
+            indices = set(range(offset, offset + len(phonemes)))
+            line_spans = [span for span in spans if span["token_index"] in indices]
+            offset += len(phonemes)
             if not line_spans:
                 continue
             result.append(TimedSegment(
@@ -59,6 +59,6 @@ class NativeSingingEngine:
                 end=float(line_spans[-1]["end"]),
                 text=line,
                 confidence=sum(float(x["confidence"]) for x in line_spans) / len(line_spans),
-                phonemes=tuple(line_spans),
+                phonemes=tuple({k: v for k, v in span.items() if k != "token_index"} for span in line_spans),
             ))
         return tuple(result)
