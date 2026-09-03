@@ -77,7 +77,7 @@ class AdaptiveAligner:
         for line in lines:
             item = by_line.get(line.index)
             if item is None:
-                output.append({"index": line.index, "text": line.text, "start": None, "end": None, "confidence": 0.0, "source": None, "words": [], "characters": []})
+                output.append({"index": line.index, "text": line.text, "start": None, "end": None, "confidence": 0.0, "source": None, "words": [], "characters": [], "phonemes": []})
                 if line.index not in invalid_lines:
                     warnings.append(f"No reliable timing evidence for lyric line {line.index}")
             else:
@@ -90,6 +90,7 @@ class AdaptiveAligner:
                     "source": item.source,
                     "words": item.metadata.get("words", []),
                     "characters": item.metadata.get("characters", []),
+                    "phonemes": item.metadata.get("phonemes", []),
                 })
         if unresolved:
             warnings.append("Unresolved lines remain after validation: " + ", ".join(map(str, unresolved)))
@@ -105,7 +106,12 @@ class AdaptiveAligner:
                 segment = run.segments[segment_index]
                 score = max(0.0, min(1.0, similarity * max(segment.confidence, 0.01)))
                 candidates[line_index].append(Candidate(segment.start, segment.end, score, run.engine))
-                metadata[(line_index, run.engine)] = {"words": list(segment.words), "similarity": similarity, "engine_confidence": segment.confidence}
+                metadata[(line_index, run.engine)] = {
+                    "words": list(segment.words),
+                    "phonemes": list(segment.phonemes),
+                    "similarity": similarity,
+                    "engine_confidence": segment.confidence,
+                }
 
         output: list[AlignmentEvidence] = []
         for line in lines:
