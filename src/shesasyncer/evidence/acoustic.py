@@ -37,8 +37,7 @@ def viterbi_phoneme_alignment(
     back = [[-1] * n for _ in range(m)]
 
     for j in range(min(n, m)):
-        score = frames[0].scores.get(tokens[j], -skip_penalty * j)
-        dp[0][j] = score
+        dp[0][j] = frames[0].scores.get(tokens[j], -skip_penalty * j)
 
     for i in range(1, m):
         for j in range(n):
@@ -59,6 +58,12 @@ def viterbi_phoneme_alignment(
         states.append(back[i][states[-1]])
     states.reverse()
 
+    if len(frames) > 1:
+        deltas = [max(0.0, frames[i + 1].time - frames[i].time) for i in range(len(frames) - 1)]
+        hop = sorted(deltas)[len(deltas) // 2] or 0.01
+    else:
+        hop = 0.01
+
     spans = []
     start = 0
     current = states[0]
@@ -69,9 +74,10 @@ def viterbi_phoneme_alignment(
             mean_score = sum(frame_scores) / len(frame_scores)
             confidence = 1.0 / (1.0 + math.exp(-mean_score))
             spans.append({
+                "token_index": current,
                 "phoneme": tokens[current],
                 "start": frames[start].time,
-                "end": frames[end - 1].time,
+                "end": frames[end - 1].time + hop,
                 "confidence": max(0.0, min(1.0, confidence)),
             })
             if i < m:
