@@ -21,11 +21,12 @@ class CtcSingingEngine:
         g2p: G2PEngine,
         acoustic_runner: Callable[[str, Sequence[str], str | None], Sequence[AcousticFrame]] | None = None,
         *,
-        blank_token: str = "<blank>",
+        blank_token: str | None = None,
     ):
         self.g2p = g2p
         self.acoustic_runner = acoustic_runner
-        self.blank_token = blank_token
+        inferred_blank = getattr(acoustic_runner, "blank_token", "<blank>")
+        self.blank_token = blank_token or inferred_blank
 
     def available(self) -> bool:
         return self.g2p.available() and callable(self.acoustic_runner)
