@@ -118,17 +118,29 @@ class AdaptiveAligner:
             merged = merge_candidates(candidates[line.index])
             if merged is None:
                 continue
-            sources = [c.source for c in candidates[line.index] if abs(c.start - merged.start) <= 0.45 and abs(c.end - merged.end) <= 0.45]
+            agreeing = [c for c in candidates[line.index] if abs(c.start - merged.start) <= 0.45 and abs(c.end - merged.end) <= 0.45]
+            sources = [c.source for c in agreeing]
             if not sources:
                 continue
             source = merged.source if len(sources) > 1 else sources[0]
+            merged_metadata = {"sources": sources, "agreement": len(sources) > 1}
+            for engine_name in sources:
+                source_metadata = metadata.get((line.index, engine_name), {})
+                for key in ("words", "phonemes"):
+                    if source_metadata.get(key):
+                        merged_metadata[key] = source_metadata[key]
+                        break
+                if "similarity" not in merged_metadata and source_metadata.get("similarity") is not None:
+                    merged_metadata["similarity"] = source_metadata["similarity"]
+                if "engine_confidence" not in merged_metadata and source_metadata.get("engine_confidence") is not None:
+                    merged_metadata["engine_confidence"] = source_metadata["engine_confidence"]
             output.append(AlignmentEvidence(
                 line_index=line.index,
                 timing=Timing(merged.start, merged.end, merged.confidence, "consensus" if len(sources) > 1 else source),
                 matched_text=line.text,
                 score=merged.confidence,
                 source=source,
-                metadata={"sources": sources, "agreement": len(sources) > 1, **metadata.get((line.index, source), {})},
+                metadata=merged_metadata,
             ))
         return output
 
