@@ -108,4 +108,7 @@ def ctc_viterbi_alignment(
             start = i if state >= 0 else None
             current_state = state if state >= 0 else None
 
+    if states and spans and labels[states[-1]] == blank_token:
+        spans[-1]["end"] = frames[-1].time + hop
+
     return tuple(spans)
