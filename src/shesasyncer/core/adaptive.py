@@ -14,10 +14,11 @@ class EngineEvidence:
 
 
 class AdaptiveAligner:
-    """Run only the timing engines needed and merge their evidence.
+    """Run timing engines adaptively and arbitrate their evidence safely.
 
-    Trusted lyrics remain canonical. Engines may disagree about recognition or
-    timing; only their timing evidence is allowed into the consensus layer.
+    Trusted lyrics remain canonical. Engines never overwrite one another:
+    compatible timing evidence reinforces through consensus, while conflicting
+    evidence leaves the line unresolved for targeted refinement.
     """
 
     def __init__(self, engines: Sequence[TimingEngine] = ()):
@@ -35,7 +36,11 @@ class AdaptiveAligner:
         for engine in self.engines:
             if not engine.available():
                 continue
-            segments = tuple(engine.align(audio_path, [x.text for x in lines], language))
+            try:
+                segments = tuple(engine.align(audio_path, [x.text for x in lines], language))
+            except Exception:
+                # An optional engine must never take down the complete alignment.
+                continue
             if segments:
                 collected.append(EngineEvidence(engine.name, segments))
         return tuple(collected)
@@ -54,8 +59,10 @@ class AdaptiveAligner:
 
         unresolved = self._unresolved_lines(lines, evidence)
         if unresolved and retry:
-            for run in retry(audio_path, unresolved):
-                evidence_runs.append(run)
+            try:
+                evidence_runs.extend(retry(audio_path, unresolved))
+            except Exception:
+                pass
             evidence = self._match(lines, evidence_runs)
             unresolved = self._unresolved_lines(lines, evidence)
 
@@ -113,15 +120,17 @@ class AdaptiveAligner:
             if merged is None:
                 continue
             sources = [c.source for c in candidates[line.index] if abs(c.start - merged.start) <= 0.45 and abs(c.end - merged.end) <= 0.45]
+            if not sources:
+                continue
             source = merged.source if len(sources) > 1 else sources[0]
             source_meta = metadata.get((line.index, source), {})
             output.append(AlignmentEvidence(
                 line_index=line.index,
-                timing=Timing(merged.start, merged.end, merged.confidence, "consensus" if len(sources) > 1 else "asr"),
+                timing=Timing(merged.start, merged.end, merged.confidence, "consensus" if len(sources) > 1 else source),
                 matched_text=line.text,
                 score=merged.confidence,
-                source=source,  # type: ignore[arg-type]
-                metadata={"sources": sources, **source_meta},
+                source=source,
+                metadata={"sources": sources, "agreement": len(sources) > 1, **source_meta},
             ))
         return output
 
