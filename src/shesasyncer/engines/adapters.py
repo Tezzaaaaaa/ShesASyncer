@@ -16,7 +16,12 @@ class TimingEngine(Protocol):
 
     def available(self) -> bool: ...
 
-    def align(self, audio_path: str, language: str | None = None) -> Sequence[TimedSegment]: ...
+    def align(
+        self,
+        audio_path: str,
+        lyrics: Sequence[str] | None = None,
+        language: str | None = None,
+    ) -> Sequence[TimedSegment]: ...
 
 
 class NullEngine:
@@ -27,5 +32,10 @@ class NullEngine:
     def available(self) -> bool:
         return False
 
-    def align(self, audio_path: str, language: str | None = None) -> Sequence[TimedSegment]:
+    def align(
+        self,
+        audio_path: str,
+        lyrics: Sequence[str] | None = None,
+        language: str | None = None,
+    ) -> Sequence[TimedSegment]:
         return ()
