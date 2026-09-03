@@ -49,20 +49,14 @@ class AdaptiveAligner:
 
         unresolved = self._unresolved_lines(lines, evidence)
         if unresolved and retry:
-            try:
-                evidence_runs.extend(retry(audio_path, unresolved))
-            except Exception:
-                pass
+            evidence_runs.extend(self._targeted_retry(audio_path, unresolved, retry))
             evidence = self._match(lines, evidence_runs)
             unresolved = self._unresolved_lines(lines, evidence)
 
         validation = validate_timeline(evidence)
         invalid_lines = {issue.line_index for issue in validation.issues if issue.severity == "error"}
         if invalid_lines and retry:
-            try:
-                evidence_runs.extend(retry(audio_path, sorted(invalid_lines)))
-            except Exception:
-                pass
+            evidence_runs.extend(self._targeted_retry(audio_path, sorted(invalid_lines), retry))
             evidence = self._match(lines, evidence_runs)
             validation = validate_timeline(evidence)
 
@@ -95,6 +89,22 @@ class AdaptiveAligner:
         if unresolved:
             warnings.append("Unresolved lines remain after validation: " + ", ".join(map(str, unresolved)))
         return AlignmentResult(output, self._confidence(evidence), warnings, evidence)
+
+    @staticmethod
+    def _targeted_retry(
+        audio_path: str,
+        line_indices: Sequence[int],
+        retry: Callable[[str, Sequence[int]], Sequence[EngineEvidence]],
+    ) -> list[EngineEvidence]:
+        collected: list[EngineEvidence] = []
+        for line_index in line_indices:
+            try:
+                runs = retry(audio_path, [line_index])
+            except Exception:
+                continue
+            if runs:
+                collected.extend(runs)
+        return collected
 
     @staticmethod
     def _match(lines: Sequence[LyricLine], runs: Sequence[EngineEvidence]) -> list[AlignmentEvidence]:
