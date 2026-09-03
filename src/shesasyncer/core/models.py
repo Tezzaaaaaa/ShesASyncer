@@ -1,19 +1,19 @@
 from dataclasses import dataclass, field
-from typing import Literal
 
-EvidenceKind = Literal["asr", "phoneme", "vocal", "consensus"]
 
 @dataclass(frozen=True)
 class LyricLine:
     index: int
     text: str
 
+
 @dataclass(frozen=True)
 class Timing:
     start: float
     end: float
     confidence: float = 0.0
-    source: EvidenceKind = "consensus"
+    source: str = "consensus"
+
 
 @dataclass
 class AlignmentEvidence:
@@ -21,8 +21,9 @@ class AlignmentEvidence:
     timing: Timing
     matched_text: str = ""
     score: float = 0.0
-    source: EvidenceKind = "asr"
+    source: str = "asr"
     metadata: dict = field(default_factory=dict)
+
 
 @dataclass
 class AlignmentResult:
