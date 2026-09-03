@@ -72,9 +72,8 @@ def _map_words(lyric: str, words: list[dict]) -> list[dict]:
     matcher = SequenceMatcher(None, [x.casefold() for x in lyric_text], [x.casefold() for x in engine_text])
     mapped = []
     for match in matcher.get_matching_blocks():
-        a0, a1 = match.a, match.a + match.size
-        b0, b1 = match.b, match.b + match.size
-        for offset in range(min(a1 - a0, b1 - b0)):
+        a0, b0, size = match.a, match.b, match.size
+        for offset in range(size):
             lyric_start, lyric_end, text = lyric_tokens[a0 + offset]
             word = words[b0 + offset]
             mapped.append({
@@ -95,17 +94,14 @@ def _character_timings(lyric: str, words: list[dict]) -> list[dict]:
         if not chars:
             continue
         duration = word["end"] - word["start"]
-        # Equal character allocation is deterministic and deliberately local:
-        # it cannot move a character outside the engine's word boundary.
         step = duration / len(chars)
-        cursor = word["start"]
-        for char in chars:
-            end = cursor + step
+        for index, char in enumerate(chars):
+            start = word["start"] + step * index
+            end = word["end"] if index == len(chars) - 1 else word["start"] + step * (index + 1)
             result.append({
                 "char": char,
-                "start": cursor,
+                "start": start,
                 "end": end,
                 "confidence": word["confidence"],
             })
-            cursor = end
     return result
