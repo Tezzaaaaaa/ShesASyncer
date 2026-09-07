@@ -7,6 +7,5 @@
   "bin": { "shesasyncer": "src/shesasyncer/cli.js" },
   "scripts": { "test": "node --test", "cli": "node src/shesasyncer/cli.js" },
   "engines": { "node": ">=20" },
-  "license": "MIT",
-  "dependencies": { "onnxruntime-node": "^1.22.0" }
+  "license": "MIT"
 }
