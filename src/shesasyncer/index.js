@@ -1,0 +1,9 @@
+export { AlignmentPipeline } from './core/pipeline.js';
+export { LyricLine, Timing, AlignmentEvidence, AlignmentResult } from './core/models.js';
+export { TimedSegment, NullEngine } from './engines/adapters.js';
+export { NativeSingingEngine } from './engines/native.js';
+export { G2PEngine, EspeakG2P } from './lyrics/g2p.js';
+export { anchorLines } from './alignment/anchor.js';
+export { monotonicMatch, similarity } from './alignment/sequence.js';
+export { validateTimeline } from './validation/timeline.js';
+export { viterbiPhonemeAlignment, AcousticFrame } from './evidence/acoustic.js';
