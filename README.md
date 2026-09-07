@@ -2,21 +2,26 @@
 
 AI-backed lyric alignment engine for accurate synchronisation of trusted lyrics to audio.
 
+## Runtime
+
+ShesASyncer is now a **Node.js / JavaScript ES-module project**. The Python implementation has been removed from this port.
+
+Requirements:
+
+- Node.js 20+
+- Optional eSpeak NG for phoneme generation
+- Acoustic/model runners are injected as adapters; model weights are not bundled
+
+Install and test:
+
+```bash
+npm install
+npm test
+```
+
 ## Purpose
 
 ShesASyncer aligns **trusted lyric text** to the actual timing of an audio recording. It never replaces trusted lyrics with an ASR transcript. Recognition, acoustic phoneme evidence and vocal analysis are timing evidence that can be combined, scored and cross-checked.
-
-## Design goals
-
-- Trusted lyrics remain canonical.
-- Fast paths for clean audio; expensive processing only when needed.
-- Singing-aware alignment without copying a third-party aligner's architecture.
-- Line, word and phoneme timing where evidence supports it.
-- Explicit confidence and uncertainty.
-- Conflict detection instead of silently averaging contradictory timestamps.
-- Targeted retries on difficult sections.
-- Replaceable model adapters with ShesASyncer-owned decoding and consensus.
-- Deterministic output suitable for KEFE.
 
 ## Architecture
 
@@ -29,8 +34,8 @@ AUDIO + TRUSTED LYRICS
     |                 |
  CLEAN ENOUGH      DIFFICULT
     |                 |
- CTC PHONEME       VOCAL / OTHER
- EVIDENCE          EVIDENCE
+ CTC PHONEME       OTHER EVIDENCE
+ EVIDENCE              |
     |                 |
     └────────┬────────┘
              |
@@ -48,58 +53,37 @@ AUDIO + TRUSTED LYRICS
              FINAL TIMELINE
 ```
 
-The core alignment logic owns the temporal decoding, matching, confidence, conflict handling and output. Acoustic models are interchangeable evidence providers.
+## JavaScript API
 
-## Native CTC path
-
-The native path is a **Wav2Vec2-style acoustic encoder + phoneme CTC posterior + ShesASyncer CTC decoder**. This is deliberately different from SOFA's singing-aligner architecture.
-
-The repository provides:
-
-- `G2PEngine` for an injectable grapheme-to-phoneme boundary.
-- `EspeakG2P` for runtime eSpeak NG IPA conversion.
-- `AcousticFrame` for model-independent frame/posterior data.
-- CTC Viterbi decoding with explicit blank handling and repeated-phoneme support.
-- `CtcSingingEngine` for reconstructing trusted lyric-line timings.
-- `OnnxCtcRunner` for local ONNX Runtime inference.
-- Optional NumPy/ONNX dependencies; model weights remain external.
-
-A suitable external reference model is the Apache-2.0 `wav2vec2-espeak-ctc` ONNX export, which accepts mono 16 kHz audio and emits 392 IPA CTC classes at approximately 50 frames/second. Model assets are intentionally not bundled into this repository. citeturn0search0turn0search3
-
-## External engines
-
-WhisperX remains optional timing evidence. Its recognized text is matched back to trusted lyrics rather than becoming the source of truth.
-
-SOFA remains an isolated optional singing-specific evidence adapter. It is not required by the native CTC path.
-
-The project does **not** vendor large model weights or copy third-party implementations. External engines stay behind adapters and can be replaced without changing the core timeline model.
-
-## Installation
-
-Core package:
-
-```bash
-python -m pip install -e .
+```js
+import { AlignmentPipeline, CtcSingingEngine, EspeakG2P } from 'shesasyncer';
 ```
 
-Tests:
+Core exports include `AlignmentPipeline`, `AdaptiveAligner`, trusted lyric models, monotonic matching, consensus/confidence handling, timeline validation, word/character refinement, the native phoneme decoder, and the CTC singing engine.
+
+### CTC path
+
+The CTC path uses an injected acoustic runner plus ShesASyncer's own CTC Viterbi decoder. The decoder explicitly handles CTC blanks and repeated phonemes. `EspeakG2P` can supply IPA phonemes at runtime.
+
+### Trusted text
+
+Trusted lyrics remain canonical. Timing evidence can be uncertain or rejected; the engine does not silently substitute recognised text for the supplied lyrics.
+
+## CLI
 
 ```bash
-python -m pip install -e '.[test]'
-python -m pytest -q
+shesasyncer --lyrics lyrics.txt --segments segments.json --output aligned.json
 ```
 
-ONNX CTC runtime:
+`segments.json` contains timed evidence such as:
 
-```bash
-python -m pip install -e '.[onnx]'
+```json
+[{"start":0,"end":1.2,"text":"hello world"}]
 ```
-
-Install eSpeak NG separately when using `EspeakG2P`. The adapter discovers `espeak-ng` or `espeak` at runtime.
 
 ## Status
 
-**Active development.** The repository now has the core adaptive alignment foundation plus a native CTC phoneme-alignment path. The remaining production work is model validation on representative singing audio, vocal-isolation routing for difficult mixes, objective timing benchmarks and KEFE integration.
+**Active development.** The JavaScript port contains the core alignment, adaptive arbitration, consensus, validation, refinement, native phoneme decoding and CTC timing path. Model-specific acoustic runners and production KEFE integration remain adapter-level work.
 
 ## License
 
