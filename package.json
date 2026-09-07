@@ -1,0 +1,11 @@
+{
+  "name": "shesasyncer",
+  "version": "0.1.0",
+  "description": "AI-backed lyric alignment engine for accurate synchronisation of trusted lyrics to audio",
+  "type": "module",
+  "main": "src/shesasyncer/index.js",
+  "bin": { "shesasyncer": "src/shesasyncer/cli.js" },
+  "scripts": { "test": "node --test", "cli": "node src/shesasyncer/cli.js" },
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}
