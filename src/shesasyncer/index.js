@@ -7,5 +7,6 @@ export { G2PEngine, EspeakG2P } from './lyrics/g2p.js';
 export { anchorLines } from './alignment/anchor.js';
 export { monotonicMatch, similarity } from './alignment/sequence.js';
 export { refineEvidence } from './alignment/refinement.js';
+export { normalizeLyric, lyricTokens } from './lyrics/normalize.js';
 export { validateTimeline } from './validation/timeline.js';
 export { viterbiPhonemeAlignment, AcousticFrame } from './evidence/acoustic.js';
