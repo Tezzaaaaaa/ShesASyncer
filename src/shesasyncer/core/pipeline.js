@@ -2,6 +2,7 @@ import { anchorLines } from '../alignment/anchor.js';
 import { monotonicMatch } from '../alignment/sequence.js';
 import { confidence, conflicts } from '../consensus/confidence.js';
 import { AlignmentEvidence, AlignmentResult, LyricLine, Timing } from './models.js';
+import { AdaptiveAligner } from './adaptive.js';
 
 export class AlignmentPipeline {
   constructor(engines = []) { this.engines = [...engines]; }
@@ -21,13 +22,11 @@ export class AlignmentPipeline {
     }
     evidence.sort((a, b) => a.lineIndex - b.lineIndex);
     const conflictLines = conflicts(evidence), byIndex = new Map(evidence.map(e => [e.lineIndex, e]));
-    const output = [], warnings = [];
-    for (const line of lines) {
-      const item = byIndex.get(line.index);
-      if (item) output.push({ index: line.index, text: line.text, start: item.timing.start, end: item.timing.end, confidence: item.timing.confidence, source: item.source });
-      else { output.push({ index: line.index, text: line.text, start: null, end: null, confidence: 0, source: null }); warnings.push(`No reliable timing evidence for lyric line ${line.index}`); }
-    }
+    const output = lines.map(line => { const item = byIndex.get(line.index); return item ? { index: line.index, text: line.text, start: item.timing.start, end: item.timing.end, confidence: item.timing.confidence, source: item.source } : { index: line.index, text: line.text, start: null, end: null, confidence: 0, source: null }; });
+    const warnings = lines.filter(x => !byIndex.has(x.index)).map(x => `No reliable timing evidence for lyric line ${x.index}`);
     if (conflictLines.length) warnings.push(`Conflicting alignment evidence requires targeted refinement: ${conflictLines.join(', ')}`);
     return new AlignmentResult(output, confidence(evidence), warnings, evidence);
   }
+
+  async runAudio(audioPath, lyrics, options = {}) { return new AdaptiveAligner(this.engines).run(audioPath, lyrics, options); }
 }
