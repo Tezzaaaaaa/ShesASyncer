@@ -1,0 +1,2 @@
+[console_scripts]
+shesasyncer = shesasyncer.cli:main
